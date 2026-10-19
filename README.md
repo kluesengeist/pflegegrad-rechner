@@ -6,7 +6,9 @@ Ein Rechner für das Begutachtungsinstrument der Pflegeversicherung (§ 15 SGB X
 
 ## Nutzung
 
-`index.html` im Browser öffnen. Das war's. Die Datei läuft auch von einem USB-Stick oder einer GitHub-Pages-Seite; nichts wird an einen Server gesendet. Gespeicherte Szenarien liegen im `localStorage` des Browsers und können als JSON exportiert und importiert werden.
+**Online:** [kluesengeist.github.io/pflegegrad-rechner](https://kluesengeist.github.io/pflegegrad-rechner/)
+
+Oder `index.html` herunterladen und im Browser öffnen. Das war's. Die Datei läuft auch von einem USB-Stick. Online wie lokal rechnet alles im Browser; nichts wird an einen Server gesendet. Gespeicherte Szenarien liegen im `localStorage` des Browsers und können als JSON exportiert und importiert werden.
 
 ## Funktionen
 
