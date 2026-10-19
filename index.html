@@ -1,0 +1,932 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pflegegrad-Rechner</title>
+<meta name="description" content="Pflegegrad-Rechner nach dem Begutachtungsinstrument (§ 15 SGB XI, Anlagen 1 und 2) – mit Vergleich zwischen geltendem Recht und dem PNOG-Entwurf 2027. Läuft komplett lokal im Browser.">
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --ink: #1c1c1a; --muted: #5b5b57; --line: #d9d9d4;
+    --accent: #1f5f8b; --accent-ink: #ffffff; --soft: #eef3f7; --warn: #8a5a00; --warn-bg: #fff6e0;
+    --ok: #2a6b3a; --ok-bg: #e9f5ec; --bad: #9b2c2c; --bad-bg: #fbeaea; --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141513; --panel: #1e201d; --ink: #ececea; --muted: #a9a9a3; --line: #3a3c38;
+      --accent: #7fb6dc; --accent-ink: #0f1a22; --soft: #22303a; --warn: #f0c56a; --warn-bg: #3a2f14;
+      --ok: #8fd4a0; --ok-bg: #1d3524; --bad: #f09a9a; --bad-bg: #3d1f1f;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--accent); }
+  h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.1rem; margin: 0 0 .5rem; }
+  h3 { font-size: 1rem; margin: 1rem 0 .25rem; }
+  p { margin: .4rem 0; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 16px 4rem; }
+  header { padding: 1.25rem 0 .5rem; }
+  header p { color: var(--muted); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem; margin: 1rem 0; }
+  .panel.warn { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
+  .small { font-size: .9rem; color: var(--muted); }
+  .muted { color: var(--muted); }
+  button, .btn { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: .45rem .8rem; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button.danger { color: var(--bad); }
+  input[type=text], input[type=number], select, textarea { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: .4rem .5rem; }
+  input[type=number] { width: 5.5rem; }
+  textarea { width: 100%; min-height: 4rem; }
+
+  /* Rechtsstand */
+  .legal-grid { display: grid; gap: .75rem; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 640px) { .legal-grid { grid-template-columns: 1fr; } }
+  .switch { border: 1px solid var(--line); border-radius: var(--radius); padding: .6rem .75rem; }
+  .switch legend { font-weight: 600; padding: 0 .3rem; }
+  .switch label { display: block; padding: .2rem 0; cursor: pointer; }
+  .presets { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; align-items: center; }
+
+  /* Ergebnis */
+  .sticky { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); margin: 0 -16px; padding: .5rem 16px; display: flex; gap: 1rem; flex-wrap: wrap; align-items: baseline; }
+  .sticky .big { font-size: 1.25rem; font-weight: 700; }
+  .pg { display: inline-block; padding: .05rem .5rem; border-radius: 999px; background: var(--soft); font-weight: 700; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-size: .9rem; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  tr.total td { font-weight: 700; border-top: 2px solid var(--line); }
+  .note { padding: .6rem .75rem; border-radius: 8px; margin-top: .75rem; font-size: .95rem; }
+  .note.ok { background: var(--ok-bg); color: var(--ok); }
+  .note.bad { background: var(--bad-bg); color: var(--bad); }
+  .note.warn { background: var(--warn-bg); color: var(--warn); }
+
+  /* Module */
+  details.module { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin: .75rem 0; }
+  details.module > summary { cursor: pointer; padding: .8rem 1rem; display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; list-style: none; }
+  details.module > summary::-webkit-details-marker { display: none; }
+  details.module > summary::before { content: "▸"; margin-right: .5rem; color: var(--muted); }
+  details[open].module > summary::before { content: "▾"; }
+  details.module > summary .mtitle { font-weight: 600; flex: 1; }
+  details.module > summary .mscore { color: var(--muted); font-size: .9rem; white-space: nowrap; text-align: right; }
+  .mbody { padding: 0 1rem 1rem; border-top: 1px solid var(--line); }
+  .mintro { font-size: .92rem; color: var(--muted); margin: .75rem 0; }
+  fieldset.item { border: 0; border-top: 1px solid var(--line); margin: 0; padding: .7rem 0; }
+  fieldset.item legend { float: left; width: 100%; padding: 0; font-weight: 500; }
+  fieldset.item legend .delta { float: right; font-weight: 400; font-size: .85rem; color: var(--muted); }
+  .hint { clear: both; font-size: .88rem; color: var(--muted); margin: .15rem 0 .4rem; }
+  body:not(.show-hints) .hint { display: none; }
+  .seg { clear: both; display: grid; grid-template-columns: repeat(4, 1fr); gap: .3rem; }
+  .seg.three { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 560px) { .seg { grid-template-columns: repeat(2, 1fr); } }
+  .seg label { border: 1px solid var(--line); border-radius: 8px; padding: .35rem .4rem; font-size: .85rem; cursor: pointer; display: flex; gap: .4rem; align-items: flex-start; }
+  .seg label:has(input:checked) { background: var(--soft); border-color: var(--accent); }
+  .seg input { margin: .2rem 0 0; }
+  .seg .pts { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+  .freq { clear: both; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+  .partsum { background: var(--soft); border-radius: 8px; padding: .5rem .75rem; margin: .5rem 0 1rem; font-size: .92rem; }
+
+  /* Szenarien */
+  .row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+  ul.scen { list-style: none; padding: 0; margin: .5rem 0 0; }
+  ul.scen li { display: flex; gap: .5rem; align-items: center; padding: .35rem 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  ul.scen li .name { flex: 1; min-width: 10rem; }
+  footer { margin-top: 2rem; font-size: .88rem; color: var(--muted); }
+  footer ul { padding-left: 1.2rem; }
+  .selftest.fail { color: var(--bad); font-weight: 600; }
+
+  @media print {
+    body { background: #fff; color: #000; font-size: 11pt; }
+    .sticky, .presets, .scenarios, .controls, button, .hint, .delta, footer nav { display: none !important; }
+    details.module { break-inside: avoid; }
+    details.module > summary::before { content: ""; }
+    .seg label { border: 0; padding: 0; }
+    .seg label:not(:has(input:checked)) { display: none; }
+    .seg input { display: none; }
+  }
+</style>
+</head>
+<body class="show-hints">
+<div class="wrap">
+
+<header>
+  <h1>Pflegegrad-Rechner</h1>
+  <p>Begutachtungsinstrument nach § 15 SGB XI (Anlagen 1 und 2) für Erwachsene – mit Umschaltung zwischen geltendem Recht und dem Entwurf des Pflegeneuordnungsgesetzes (PNOG). Alles wird nur in diesem Browser gerechnet und gespeichert; es werden keine Daten übertragen.</p>
+</header>
+
+<div class="sticky" id="stickyBar" aria-live="polite">
+  <span class="big" id="stickyTotal">0 Punkte</span>
+  <span class="pg" id="stickyPg">kein Pflegegrad</span>
+  <span class="small" id="stickyLegal"></span>
+  <span class="small" id="stickyOther"></span>
+</div>
+
+<section class="panel warn" id="disclaimer">
+  <strong>Kein Rechtsrat, keine amtliche Begutachtung.</strong> Der Rechner bildet die Punktelogik der Anlagen 1 und 2 zu § 15 SGB XI nach. Die Einstufung selbst nimmt der Medizinische Dienst (MD) vor; Begutachtungs-Richtlinien und Gutachterentscheidung können vom hier gerechneten Ergebnis abweichen. Der Rechtsstand „PNOG-Entwurf" beruht auf dem Kabinettsentwurf vom 30.09.2026, der noch nicht beschlossen ist; die dort hinterlegte neue Anlage 2 ist aus veröffentlichten Auswertungen des Entwurfs rekonstruiert (siehe Quellen). Sonderregeln für Kinder (Altersvergleich, abweichende Schwellen bis 18 Monate) sind nicht abgebildet.
+</section>
+
+<section class="panel" id="legalPanel">
+  <h2>Rechtsstand</h2>
+  <div class="legal-grid">
+    <fieldset class="switch" id="swThresholds">
+      <legend>Schwellenwerte (Pflegegrade)</legend>
+    </fieldset>
+    <fieldset class="switch" id="swAnlage2">
+      <legend>Anlage 2 (Umrechnung der Module)</legend>
+    </fieldset>
+  </div>
+  <div class="presets controls">
+    <span class="small">Voreinstellung:</span>
+    <button type="button" data-preset="2026">Geltendes Recht (2026)</button>
+    <button type="button" data-preset="2027">PNOG-Entwurf (2027)</button>
+    <label class="small" style="margin-left:auto"><input type="checkbox" id="toggleHints" checked> Erläuterungen anzeigen</label>
+  </div>
+</section>
+
+<section class="panel" id="resultPanel">
+  <h2>Ergebnis</h2>
+  <table id="resultTable" aria-describedby="resultHint">
+    <thead>
+      <tr><th>Modul</th><th class="num">Einzelpunkte</th><th class="num">gewichtet<br>geltend</th><th class="num">gewichtet<br>PNOG-E</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <p class="small" id="resultHint">Von Modul 2 und 3 zählt nur der höhere gewichtete Wert. Die Spalten zeigen beide Rechtsstände nebeneinander; die Pflegegrad-Zeile verwendet jeweils die passenden Schwellenwerte. Der fett markierte Rechtsstand ist der oben gewählte.</p>
+  <div id="resultNotes"></div>
+  <label class="small" style="display:block;margin-top:.75rem"><input type="checkbox" id="bbk"> Besondere Bedarfskonstellation: Gebrauchsunfähigkeit beider Arme und beider Beine (§ 15 Abs. 4 SGB XI) – ergibt Pflegegrad 5 unabhängig von den Punkten</label>
+</section>
+
+<section class="panel">
+  <h2>Bewertungsskala</h2>
+  <p class="small">Gefragt ist, ob und wie viel personelle Hilfe erforderlich wäre – nicht, wie lange etwas dauert, und nicht, ob die Hilfe tatsächlich geleistet wird. Hilfsmittel dürfen genutzt werden. Was seltener als einmal pro Woche vorkommt, bleibt in der Regel außer Betracht; bei schwankendem Verlauf zählt das typische Bild über die Woche.</p>
+  <ul class="small">
+    <li><strong>Selbständig:</strong> ohne personelle Hilfe möglich, auch wenn es mühsam ist oder länger dauert.</li>
+    <li><strong>Überwiegend selbständig:</strong> nur geringe Hilfe nötig: Zurechtlegen, Aufforderung, Erinnerung, Anleitung, punktuelle Teilübernahme oder Anwesenheit aus Sicherheitsgründen.</li>
+    <li><strong>Überwiegend unselbständig:</strong> nur geringe Anteile selbst; umfassende Anleitung, Motivation oder Begleitung während der gesamten Handlung oder Übernahme wesentlicher Teilschritte nötig.</li>
+    <li><strong>Unselbständig:</strong> die Handlung muss vollständig oder nahezu vollständig von anderen übernommen oder gesteuert werden.</li>
+  </ul>
+</section>
+
+<main id="modules"></main>
+
+<section class="panel scenarios" id="scenarioPanel">
+  <h2>Szenarien</h2>
+  <p class="small">Szenarien werden nur in diesem Browser gespeichert (localStorage). Für Sicherung oder Weitergabe die JSON-Datei exportieren.</p>
+  <div class="row">
+    <input type="text" id="scenName" placeholder="Name des Szenarios" style="flex:1;min-width:12rem">
+    <button type="button" class="primary" id="btnSave">Speichern</button>
+  </div>
+  <label class="small" style="display:block;margin-top:.5rem">Notiz zum aktuellen Szenario<textarea id="scenNote" placeholder="z. B. Begründungen für einzelne Bewertungen"></textarea></label>
+  <div class="row" style="margin-top:.5rem">
+    <button type="button" id="btnExport">Aktuelles Szenario als JSON exportieren</button>
+    <button type="button" id="btnExportAll">Alle gespeicherten exportieren</button>
+    <label class="btn">JSON importieren <input type="file" id="fileImport" accept="application/json,.json" style="display:none"></label>
+    <button type="button" id="btnDemo">Beispiel laden</button>
+    <button type="button" class="danger" id="btnReset">Alles zurücksetzen</button>
+    <button type="button" id="btnPrint">Drucken</button>
+  </div>
+  <ul class="scen" id="scenList"></ul>
+</section>
+
+<footer>
+  <p id="selftest" class="selftest"></p>
+  <nav>
+    <strong>Quellen</strong>
+    <ul>
+      <li><a href="https://www.gesetze-im-internet.de/sgb_11/__15.html" rel="noopener">§ 15 SGB XI</a> ·
+          <a href="https://www.gesetze-im-internet.de/sgb_11/anlage_1.html" rel="noopener">Anlage 1 (Einzelpunkte)</a> ·
+          <a href="https://www.gesetze-im-internet.de/sgb_11/anlage_2.html" rel="noopener">Anlage 2 (Bewertungssystematik)</a></li>
+      <li><a href="https://www.bundesgesundheitsministerium.de/service/gesetze-und-verordnungen/detail/pflegeneuordnungsgesetz-pnog" rel="noopener">BMG: Pflegeneuordnungsgesetz (PNOG), Kabinettsentwurf vom 30.09.2026</a></li>
+      <li><a href="https://pflege-dschungel.de/neuerungen-zur-pflegegrad-einstufung/" rel="noopener">Pflege-Dschungel: neue Bewertung innerhalb der Module (Auswertung des Entwurfs)</a></li>
+      <li>Module 7 und 8 sowie die Skalendefinitionen folgen den Begutachtungs-Richtlinien (BRi) des Medizinischen Dienstes Bund.</li>
+    </ul>
+  </nav>
+  <p>Rechtsstand des Rechners: Oktober 2026. Open Source unter MIT-Lizenz – die Rechtstabellen stehen gesammelt im Objekt <code>LEGAL</code> im Quelltext und können bei Änderungen angepasst werden.</p>
+</footer>
+
+</div>
+
+<script id="nba-core">
+/* =====================================================================
+   Kern: Daten und Rechenlogik (ohne DOM). Wird von der Oberfläche und
+   von den Selbsttests gemeinsam genutzt.
+   ===================================================================== */
+(function (root) {
+  'use strict';
+
+  // --- Skalen -----------------------------------------------------------
+  const S_SELBST = [
+    { v: 0, l: 'selbständig' }, { v: 1, l: 'überwiegend selbständig' },
+    { v: 2, l: 'überwiegend unselbständig' }, { v: 3, l: 'unselbständig' }];
+  const S_FAEHIG = [
+    { v: 0, l: 'vorhanden / unbeeinträchtigt' }, { v: 1, l: 'größtenteils vorhanden' },
+    { v: 2, l: 'in geringem Maße vorhanden' }, { v: 3, l: 'nicht vorhanden' }];
+  const S_HAEUFIG = [
+    { v: 0, l: 'nie oder sehr selten' }, { v: 1, l: 'selten (1–3× in zwei Wochen)' },
+    { v: 3, l: 'häufig (2× bis mehrmals wöchentlich, nicht täglich)' }, { v: 5, l: 'täglich' }];
+  const mk = (vals, labels = S_SELBST) => vals.map((v, i) => ({ v, l: labels[i].l }));
+  const S_ESSEN = mk([0, 3, 6, 9]);
+  const S_X2 = mk([0, 2, 4, 6]);
+  const S_SONDE = [{ v: 0, l: 'entfällt' }, { v: 6, l: 'teilweise' }, { v: 3, l: 'vollständig' }];
+  const S_516 = [
+    { v: 0, l: 'entfällt oder selbständig' }, { v: 1, l: 'überwiegend selbständig' },
+    { v: 2, l: 'überwiegend unselbständig' }, { v: 3, l: 'unselbständig' }];
+
+  // --- Items (Anlage 1 zu § 15 SGB XI; Module 7/8 nach BRi) -------------
+  const it = (id, label, hint, scale = S_SELBST) => ({ id, label, hint, scale });
+
+  const MODULES = [
+    {
+      id: 1, title: 'Mobilität', weight: '10 %', scored: true,
+      intro: 'Körperliche Fortbewegung und Lagewechsel. Bewertet wird die Fähigkeit, nicht die Dauer.',
+      items: [
+        it('1.1', 'Positionswechsel im Bett', 'Drehen, Aufrichten, Hoch- und Herunterrutschen im Bett.'),
+        it('1.2', 'Halten einer stabilen Sitzposition', 'Aufrecht sitzen auf Bett, Stuhl oder Toilette, ohne von anderen gehalten zu werden.'),
+        it('1.3', 'Umsetzen', 'Von einer erhöhten Sitzfläche auf eine andere wechseln, z. B. Bett – Stuhl – Rollstuhl.'),
+        it('1.4', 'Fortbewegen innerhalb des Wohnbereichs', 'Zwischen den Räumen bewegen, auch mit Hilfsmittel; Maßstab sind etwa acht Meter Wegstrecke.'),
+        it('1.5', 'Treppensteigen', 'Treppe zwischen zwei Etagen überwinden – unabhängig davon, ob zu Hause eine Treppe vorhanden ist.')
+      ]
+    },
+    {
+      id: 2, title: 'Kognitive und kommunikative Fähigkeiten', weight: '15 % (gemeinsam mit Modul 3)', scored: true,
+      intro: 'Gefragt ist, ob die Fähigkeit vorhanden ist. Von Modul 2 und 3 zählt nur der höhere gewichtete Wert.',
+      items: [
+        it('2.1', 'Erkennen von Personen aus dem näheren Umfeld', 'Vertraute Personen erkennen und zuordnen.', S_FAEHIG),
+        it('2.2', 'Örtliche Orientierung', 'Sich in der Wohnung und im vertrauten Umfeld zurechtfinden.', S_FAEHIG),
+        it('2.3', 'Zeitliche Orientierung', 'Tageszeit, Wochentag, Jahreszeit einschätzen.', S_FAEHIG),
+        it('2.4', 'Erinnern an wesentliche Ereignisse oder Beobachtungen', 'Kurz- und Langzeitgedächtnis für alltagsrelevante Dinge.', S_FAEHIG),
+        it('2.5', 'Steuern von mehrschrittigen Alltagshandlungen', 'Eine Handlungsfolge planen, beginnen und in der richtigen Reihenfolge zu Ende bringen.', S_FAEHIG),
+        it('2.6', 'Treffen von Entscheidungen im Alltagsleben', 'Zwischen Alternativen wählen, z. B. passende Kleidung oder Einkauf.', S_FAEHIG),
+        it('2.7', 'Verstehen von Sachverhalten und Informationen', 'Informationen aufnehmen und einordnen, z. B. Nachrichten oder Erklärungen.', S_FAEHIG),
+        it('2.8', 'Erkennen von Risiken und Gefahren', 'Alltägliche Gefahrenquellen einschätzen, z. B. Herd, Straßenverkehr.', S_FAEHIG),
+        it('2.9', 'Mitteilen von elementaren Bedürfnissen', 'Hunger, Durst, Schmerz, Hilfebedarf äußern – auch nonverbal.', S_FAEHIG),
+        it('2.10', 'Verstehen von Aufforderungen', 'Einfache Bitten und Anweisungen verstehen.', S_FAEHIG),
+        it('2.11', 'Beteiligen an einem Gespräch', 'Einem Gespräch folgen und passend antworten.', S_FAEHIG)
+      ]
+    },
+    {
+      id: 3, title: 'Verhaltensweisen und psychische Problemlagen', weight: '15 % (gemeinsam mit Modul 2)', scored: true,
+      intro: 'Bewertet wird, wie häufig das Verhalten personelle Unterstützung oder ein Eingreifen anderer erforderlich macht.',
+      items: [
+        it('3.1', 'Motorisch geprägte Verhaltensauffälligkeiten', 'Ziellos umhergehen, Weglaufen, nicht sitzen bleiben können.', S_HAEUFIG),
+        it('3.2', 'Nächtliche Unruhe', 'Gestörter Tag-Nacht-Rhythmus, nächtliches Umherirren; nicht gemeint sind Schlafprobleme ohne Interventionsbedarf.', S_HAEUFIG),
+        it('3.3', 'Selbstschädigendes und autoaggressives Verhalten', 'Sich selbst verletzen, ungenießbare Substanzen zu sich nehmen.', S_HAEUFIG),
+        it('3.4', 'Beschädigen von Gegenständen', 'Gegenstände zerstören, werfen, treten.', S_HAEUFIG),
+        it('3.5', 'Physisch aggressives Verhalten gegenüber anderen Personen', 'Schlagen, Stoßen, Kratzen, Beißen.', S_HAEUFIG),
+        it('3.6', 'Verbale Aggression', 'Beschimpfen, Bedrohen.', S_HAEUFIG),
+        it('3.7', 'Andere pflegerelevante vokale Auffälligkeiten', 'Lautes Rufen, Klagen ohne erkennbaren Grund, ständiges Wiederholen.', S_HAEUFIG),
+        it('3.8', 'Abwehr pflegerischer und anderer unterstützender Maßnahmen', 'Notwendige Hilfe ablehnen oder behindern, Medikamente verweigern.', S_HAEUFIG),
+        it('3.9', 'Wahnvorstellungen', 'Überzeugungen ohne Realitätsbezug, die ein Eingreifen erfordern.', S_HAEUFIG),
+        it('3.10', 'Ängste', 'Angstzustände, die Beruhigung oder Beistand erfordern.', S_HAEUFIG),
+        it('3.11', 'Antriebslosigkeit bei depressiver Stimmungslage', 'Sich nicht zu Aktivitäten aufraffen können; Motivation und Anstoß durch andere sind nötig.', S_HAEUFIG),
+        it('3.12', 'Sozial inadäquate Verhaltensweisen', 'Distanzlosigkeit, unangemessene Reaktionen im Kontakt, Rückzug, der Eingreifen erfordert.', S_HAEUFIG),
+        it('3.13', 'Sonstige pflegerelevante inadäquate Handlungen', 'z. B. Horten, Entkleiden in unpassenden Situationen, Umgang mit Ausscheidungen.', S_HAEUFIG)
+      ]
+    },
+    {
+      id: 4, title: 'Selbstversorgung', weight: '40 %', scored: true,
+      intro: 'Das gewichtigste Modul. Auch Aufforderung, Erinnerung oder Anleitung zählen als Hilfe. Essen, Trinken und Toilettengang sind mehrfach gewichtet.',
+      items: [
+        it('4.1', 'Waschen des vorderen Oberkörpers', 'Hände, Gesicht, Hals, Arme, Achselhöhlen, vorderer Brust- und Bauchbereich.'),
+        it('4.2', 'Körperpflege im Bereich des Kopfes', 'Kämmen, Zahnpflege oder Prothesenreinigung, Rasieren.'),
+        it('4.3', 'Waschen des Intimbereichs', 'Waschen und Abtrocknen des Intimbereichs.'),
+        it('4.4', 'Duschen und Baden einschließlich Waschen der Haare', 'Ein- und Aussteigen, Waschen des ganzen Körpers, Haare waschen, Abtrocknen.'),
+        it('4.5', 'An- und Auskleiden des Oberkörpers', 'Bereitgelegte Kleidung an- und ausziehen, einschließlich Verschlüsse.'),
+        it('4.6', 'An- und Auskleiden des Unterkörpers', 'Einschließlich Schuhe und Strümpfe.'),
+        it('4.7', 'Mundgerechtes Zubereiten der Nahrung und Eingießen von Getränken', 'Zerkleinern, Öffnen von Verpackungen, Eingießen – nicht das Kochen (Modul 8).'),
+        it('4.8', 'Essen', 'Nahrung zum Mund führen, kauen, schlucken, ausreichend essen; auch Aufforderung zählt. Dreifach gewichtet.', S_ESSEN),
+        it('4.9', 'Trinken', 'Getränke zum Mund führen, ausreichend trinken; auch Erinnerung zählt. Doppelt gewichtet.', S_X2),
+        it('4.10', 'Benutzen einer Toilette oder eines Toilettenstuhls', 'Hingehen, Hinsetzen, Aufstehen, Intimhygiene, Kleidung richten. Doppelt gewichtet.', S_X2),
+        it('4.11', 'Bewältigen der Folgen einer Harninkontinenz und Umgang mit Dauerkatheter und Urostoma', 'Zählt nur bei überwiegender oder vollständiger Inkontinenz bzw. künstlicher Ableitung.'),
+        it('4.12', 'Bewältigen der Folgen einer Stuhlinkontinenz und Umgang mit Stoma', 'Zählt nur bei überwiegender oder vollständiger Inkontinenz bzw. Stoma.'),
+        it('4.13', 'Ernährung parenteral oder über Sonde', '„Teilweise" (6) setzt tägliche Hilfe zusätzlich zur oralen Aufnahme voraus; „vollständig" (3) ersetzt die orale Ernährung.', S_SONDE)
+      ]
+    },
+    {
+      id: 5, title: 'Bewältigung von und selbständiger Umgang mit krankheits- oder therapiebedingten Anforderungen und Belastungen', weight: '20 %', scored: true, special: 'm5',
+      intro: 'Nur ärztlich angeordnete Maßnahmen, die nicht selbständig durchgeführt werden können (auch Erinnern, Vorbereiten oder Begleiten gilt als Hilfe). Häufigkeiten eintragen; die Umrechnung in Punkte folgt Anlage 1.',
+      parts: [
+        {
+          key: 'p1', title: 'Teil 1: Summe der Maßnahmen pro Tag',
+          rule: '0 Punkte: entfällt oder seltener als einmal täglich · 1 Punkt: ein- bis dreimal täglich · 2 Punkte: mehr als drei- bis achtmal täglich · 3 Punkte: mehr als achtmal täglich. Umrechnung: pro Woche ÷ 7, pro Monat ÷ 30.',
+          items: [
+            it('5.1', 'Medikation', 'Richten, Erinnern, Überwachen oder Verabreichen von Medikamenten (Tabletten, Tropfen, Salben u. a.).'),
+            it('5.2', 'Injektionen (subcutan oder intramuskulär)', 'z. B. Insulin, Heparin.'),
+            it('5.3', 'Versorgung intravenöser Zugänge (Port)', 'Pflege und Nutzung eines Ports oder anderer Zugänge.'),
+            it('5.4', 'Absaugen und Sauerstoffgabe', 'Absaugen der Atemwege, Anlegen und Steuern der Sauerstoffversorgung.'),
+            it('5.5', 'Einreibungen sowie Kälte- und Wärmeanwendungen', 'Nur ärztlich verordnete Anwendungen.'),
+            it('5.6', 'Messung und Deutung von Körperzuständen', 'Blutdruck, Blutzucker, Gewicht, Temperatur – einschließlich Bewertung der Werte.'),
+            it('5.7', 'Körpernahe Hilfsmittel', 'An- und Ablegen von Prothesen, Orthesen, Kompressionsstrümpfen, Hörgerät, Brille.')
+          ]
+        },
+        {
+          key: 'p2', title: 'Teil 2: Summe der Maßnahmen pro Tag',
+          rule: '0 Punkte: entfällt oder seltener als einmal wöchentlich · 1 Punkt: ein- bis mehrmals wöchentlich · 2 Punkte: ein- bis unter dreimal täglich · 3 Punkte: mindestens dreimal täglich.',
+          items: [
+            it('5.8', 'Verbandswechsel und Wundversorgung', 'Versorgung chronischer Wunden, Verbände.'),
+            it('5.9', 'Versorgung mit Stoma', 'Wechsel und Pflege eines künstlichen Darm- oder Blasenausgangs.'),
+            it('5.10', 'Regelmäßige Einmalkatheterisierung und Nutzung von Abführmethoden', 'Katheterisieren, Einläufe, digitale Ausräumung.'),
+            it('5.11', 'Therapiemaßnahmen in häuslicher Umgebung', 'Verordnete Übungsprogramme zu Hause (z. B. Krankengymnastik-Übungen, Atemtraining) – nicht die Therapiesitzung selbst (siehe 5.14).')
+          ]
+        },
+        {
+          key: 'p3', title: 'Teil 3: gewichtete Summe pro Monat',
+          rule: 'Je Vorkommen: 5.13 und 5.14 zählen 1, die zeit- und technikintensiven Maßnahmen (5.12) und zeitlich ausgedehnten Besuche (5.15) zählen 2. Umrechnung: pro Tag × 30, pro Woche × 4,3. Punkte: unter 4,3 → 0 · 4,3 bis unter 8,6 → 1 · 8,6 bis unter 12,9 → 2 · 12,9 bis unter 60 → 3 · ab 60 → 6.',
+          items: [
+            it('5.12', 'Zeit- und technikintensive Maßnahmen in häuslicher Umgebung', 'z. B. Heimdialyse, Beatmung. Zählt doppelt.'),
+            it('5.13', 'Arztbesuche', 'Nur, wenn Begleitung oder Organisation durch andere erforderlich ist.'),
+            it('5.14', 'Besuch anderer medizinischer oder therapeutischer Einrichtungen (bis zu drei Stunden)', 'z. B. Physiotherapie, Ergotherapie, Psychotherapie – mit erforderlicher Begleitung.'),
+            it('5.15', 'Zeitlich ausgedehnte Besuche anderer medizinischer oder therapeutischer Einrichtungen (länger als drei Stunden)', 'z. B. Dialysezentrum, teilstationäre Behandlung. Zählt doppelt.')
+          ]
+        }
+      ],
+      items: [
+        it('5.16', 'Einhalten einer Diät und anderer krankheits- oder therapiebedingter Verhaltensvorschriften', 'z. B. Diabetesdiät, Trinkmengenbeschränkung, Bewegungs- oder Schonungsvorgaben.', S_516)
+      ]
+    },
+    {
+      id: 6, title: 'Gestaltung des Alltagslebens und sozialer Kontakte', weight: '15 %', scored: true,
+      intro: 'Tagesstruktur, Beschäftigung, Planung und Kontakte.',
+      items: [
+        it('6.1', 'Gestaltung des Tagesablaufs und Anpassung an Veränderungen', 'Den Tag strukturieren, Routinen und Termine einhalten, auf Änderungen reagieren.'),
+        it('6.2', 'Ruhen und Schlafen', 'Ruhephasen planen, Schlafrhythmus einhalten.'),
+        it('6.3', 'Sichbeschäftigen', 'Eigenständig einer Tätigkeit nachgehen, z. B. Lesen, Hobby, gezielt Fernsehen.'),
+        it('6.4', 'Vornehmen von in die Zukunft gerichteten Planungen', 'Termine, Vorhaben und Besorgungen planen.'),
+        it('6.5', 'Interaktion mit Personen im direkten Kontakt', 'Kontakt zu anwesenden Personen aufnehmen und gestalten.'),
+        it('6.6', 'Kontaktpflege zu Personen außerhalb des direkten Umfelds', 'Telefonieren, Schreiben, Besuche verabreden.')
+      ]
+    },
+    {
+      id: 7, title: 'Außerhäusliche Aktivitäten', weight: 'nicht gewertet', scored: false,
+      intro: 'Wird erhoben, fließt aber nicht in die Gesamtpunkte ein. Dient der Versorgungsplanung und Beratung.',
+      items: [
+        it('7.1', 'Verlassen des Bereichs der Wohnung oder der Einrichtung', ''),
+        it('7.2', 'Fortbewegen außerhalb der Wohnung oder Einrichtung', ''),
+        it('7.3', 'Nutzung öffentlicher Verkehrsmittel im Nahverkehr', ''),
+        it('7.4', 'Mitfahren in einem Kraftfahrzeug', ''),
+        it('7.5', 'Teilnahme an kulturellen, religiösen oder sportlichen Veranstaltungen', ''),
+        it('7.6', 'Besuch von Schule, Kindergarten, Arbeitsplatz, Werkstatt für behinderte Menschen oder Tagespflege', ''),
+        it('7.7', 'Teilnahme an sonstigen Aktivitäten mit anderen Menschen', '')
+      ]
+    },
+    {
+      id: 8, title: 'Haushaltsführung', weight: 'nicht gewertet', scored: false,
+      intro: 'Wird erhoben, fließt aber nicht in die Gesamtpunkte ein. Relevant für Hilfen bei der Haushaltsführung und Beratung.',
+      items: [
+        it('8.1', 'Einkaufen für den täglichen Bedarf', ''),
+        it('8.2', 'Zubereitung einfacher Mahlzeiten', ''),
+        it('8.3', 'Einfache Aufräum- und Reinigungsarbeiten', ''),
+        it('8.4', 'Aufwändige Aufräum- und Reinigungsarbeiten einschließlich Wäschepflege', ''),
+        it('8.5', 'Nutzung von Dienstleistungen', ''),
+        it('8.6', 'Umgang mit finanziellen Angelegenheiten', ''),
+        it('8.7', 'Umgang mit Behördenangelegenheiten', '')
+      ]
+    }
+  ];
+
+  // --- Rechtstabellen -----------------------------------------------------
+  // Bänder: [von, bis, gewichtete Punkte] je Modul. Lückenlos von 0 bis zum Modulmaximum.
+  const LEGAL = {
+    thresholds: {
+      '2026': {
+        label: 'geltendes Recht (bis 31.12.2026)',
+        short: 'geltend',
+        values: [12.5, 27, 47.5, 70, 90],
+        source: '§ 15 Abs. 3 SGB XI'
+      },
+      '2027': {
+        label: 'PNOG-Kabinettsentwurf vom 30.09.2026 (ab 01.01.2027 geplant, nicht beschlossen)',
+        short: 'PNOG-E',
+        values: [15, 30, 50, 70, 90],
+        source: 'Art. 1 Nr. 16 des Kabinettsentwurfs (§ 15 Abs. 3 Satz 4 SGB XI-E)'
+      }
+    },
+    anlage2: {
+      '2026': {
+        label: 'geltende Anlage 2',
+        short: 'geltend',
+        bands: {
+          1: [[0, 1, 0], [2, 3, 2.5], [4, 5, 5], [6, 9, 7.5], [10, 15, 10]],
+          2: [[0, 1, 0], [2, 5, 3.75], [6, 10, 7.5], [11, 16, 11.25], [17, 33, 15]],
+          3: [[0, 0, 0], [1, 2, 3.75], [3, 4, 7.5], [5, 6, 11.25], [7, 65, 15]],
+          4: [[0, 2, 0], [3, 7, 10], [8, 18, 20], [19, 36, 30], [37, 54, 40]],
+          5: [[0, 0, 0], [1, 1, 5], [2, 3, 10], [4, 5, 15], [6, 15, 20]],
+          6: [[0, 0, 0], [1, 3, 3.75], [4, 6, 7.5], [7, 11, 11.25], [12, 18, 15]]
+        },
+        source: 'Anlage 2 zu § 15 SGB XI'
+      },
+      '2027': {
+        label: 'Anlage 2 nach PNOG-Kabinettsentwurf (Module 1, 4 und 6 geändert; rekonstruiert)',
+        short: 'PNOG-E',
+        bands: {
+          1: [[0, 1, 0], [2, 3, 2.5], [4, 6, 5], [7, 9, 7.5], [10, 15, 10]],
+          2: [[0, 1, 0], [2, 5, 3.75], [6, 10, 7.5], [11, 16, 11.25], [17, 33, 15]],
+          3: [[0, 0, 0], [1, 2, 3.75], [3, 4, 7.5], [5, 6, 11.25], [7, 65, 15]],
+          4: [[0, 3, 0], [4, 9, 10], [10, 24, 20], [25, 39, 30], [40, 54, 40]],
+          5: [[0, 0, 0], [1, 1, 5], [2, 3, 10], [4, 5, 15], [6, 15, 20]],
+          6: [[0, 1, 0], [2, 3, 3.75], [4, 6, 7.5], [7, 11, 11.25], [12, 18, 15]]
+        },
+        source: 'Rückkehr zu den Werten des Expertenbeirats 2013; aus Auswertungen des Entwurfs rekonstruiert, Originaltabelle vor Veröffentlichung des Gesetzes prüfen'
+      }
+    }
+  };
+
+  const UNIT_FACTOR_DAY = { d: 1, w: 1 / 7, m: 1 / 30 };     // für Teil 1 und 2 (pro Tag)
+  const UNIT_FACTOR_MONTH = { d: 30, w: 4.3, m: 1 };       // für Teil 3 (pro Monat)
+  const M5_WEIGHT = { '5.12': 2, '5.13': 1, '5.14': 1, '5.15': 2 };
+
+  function m5Points(parts) {
+    // parts: {"5.1": {n, u}, ...}
+    const get = id => { const e = parts[id] || { n: 0, u: 'd' }; const n = Number(e.n) || 0; return { n: n < 0 ? 0 : n, u: e.u || 'd' }; };
+    let s1 = 0; for (const id of ['5.1', '5.2', '5.3', '5.4', '5.5', '5.6', '5.7']) { const e = get(id); s1 += e.n * UNIT_FACTOR_DAY[e.u]; }
+    let s2 = 0; for (const id of ['5.8', '5.9', '5.10', '5.11']) { const e = get(id); s2 += e.n * UNIT_FACTOR_DAY[e.u]; }
+    let s3 = 0; for (const id of ['5.12', '5.13', '5.14', '5.15']) { const e = get(id); s3 += e.n * UNIT_FACTOR_MONTH[e.u] * M5_WEIGHT[id]; }
+    const eps = 1e-9;
+    const p1 = s1 < 1 - eps ? 0 : s1 <= 3 + eps ? 1 : s1 <= 8 + eps ? 2 : 3;
+    const p2 = s2 < 1 / 7 - eps ? 0 : s2 < 1 - eps ? 1 : s2 < 3 - eps ? 2 : 3;
+    const p3 = s3 < 4.3 - eps ? 0 : s3 < 8.6 - eps ? 1 : s3 < 12.9 - eps ? 2 : s3 < 60 - eps ? 3 : 6;
+    return { s1, s2, s3, p1, p2, p3 };
+  }
+
+  function weighted(bands, moduleId, points) {
+    for (const [from, to, w] of bands[moduleId]) if (points >= from && points <= to) return w;
+    throw new Error('Modul ' + moduleId + ': ' + points + ' Einzelpunkte außerhalb der Skala');
+  }
+
+  function pflegegrad(total, thresholds) {
+    let pg = 0;
+    thresholds.forEach((t, i) => { if (total >= t - 1e-9) pg = i + 1; });
+    return pg;
+  }
+
+  // state: { items: {id: value}, m5: {id: {n,u}}, flags: {bbk} }
+  function singlePoints(state) {
+    const sum = m => m.items.reduce((a, item) => a + (Number(state.items[item.id]) || 0), 0);
+    const single = {};
+    for (const m of MODULES) if (m.scored && m.id !== 5) single[m.id] = sum(m);
+    const m5 = m5Points(state.m5 || {});
+    single[5] = m5.p1 + m5.p2 + m5.p3 + (Number(state.items['5.16']) || 0);
+    return { single, m5 };
+  }
+
+  function score(state, legalSel) {
+    const { single, m5 } = singlePoints(state);
+    const bands = LEGAL.anlage2[legalSel.anlage2].bands;
+    const w = {};
+    for (const id of [1, 2, 3, 4, 5, 6]) w[id] = weighted(bands, id, single[id]);
+    const w23 = Math.max(w[2], w[3]);
+    const total = w[1] + w23 + w[4] + w[5] + w[6];
+    let pg = pflegegrad(total, LEGAL.thresholds[legalSel.thresholds].values);
+    const bbk = !!(state.flags && state.flags.bbk);
+    if (bbk) pg = 5;
+    return { single, m5, weighted: w, w23, total, pg, bbk };
+  }
+
+  function emptyState() {
+    const items = {};
+    for (const m of MODULES) for (const item of m.items) items[item.id] = 0;
+    const m5 = {};
+    for (const p of MODULES[4].parts) for (const item of p.items) m5[item.id] = { n: 0, u: 'd' };
+    return { items, m5, flags: { bbk: false }, note: '' };
+  }
+
+  function fmt(n) {
+    return Number(n).toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+
+  // --- Selbsttests --------------------------------------------------------
+  function selfTest() {
+    const results = [];
+    const t = (name, cond) => results.push({ name, ok: !!cond });
+    const A = LEGAL.anlage2['2026'].bands, N = LEGAL.anlage2['2027'].bands;
+    // Bänder lückenlos und ohne Überlappung
+    const maxima = { 1: 15, 2: 33, 3: 65, 4: 54, 5: 15, 6: 18 };
+    for (const tab of [A, N]) for (const id of [1, 2, 3, 4, 5, 6]) {
+      let expect = 0, ok = true;
+      for (const [from, to] of tab[id]) { if (from !== expect) ok = false; expect = to + 1; }
+      t('Bänder Modul ' + id + ' lückenlos', ok && expect - 1 === maxima[id]);
+    }
+    // geltende Anlage 2 (Fixpunkte)
+    t('A2 alt M1 6→7,5', weighted(A, 1, 6) === 7.5);
+    t('A2 alt M4 3→10', weighted(A, 4, 3) === 10);
+    t('A2 alt M4 8→20', weighted(A, 4, 8) === 20);
+    t('A2 alt M4 19→30', weighted(A, 4, 19) === 30);
+    t('A2 alt M4 37→40', weighted(A, 4, 37) === 40);
+    t('A2 alt M5 4→15', weighted(A, 5, 4) === 15);
+    t('A2 alt M6 1→3,75', weighted(A, 6, 1) === 3.75);
+    // Anlage 2 nach Entwurf
+    t('A2 neu M1 6→5', weighted(N, 1, 6) === 5);
+    t('A2 neu M4 3→0', weighted(N, 4, 3) === 0);
+    t('A2 neu M4 4→10', weighted(N, 4, 4) === 10);
+    t('A2 neu M4 9→10', weighted(N, 4, 9) === 10);
+    t('A2 neu M4 10→20', weighted(N, 4, 10) === 20);
+    t('A2 neu M4 24→20', weighted(N, 4, 24) === 20);
+    t('A2 neu M4 25→30', weighted(N, 4, 25) === 30);
+    t('A2 neu M4 39→30', weighted(N, 4, 39) === 30);
+    t('A2 neu M4 40→40', weighted(N, 4, 40) === 40);
+    t('A2 neu M6 1→0', weighted(N, 6, 1) === 0);
+    t('A2 neu M6 3→3,75', weighted(N, 6, 3) === 3.75);
+    t('A2 neu M2/M3/M5 unverändert', JSON.stringify([N[2], N[3], N[5]]) === JSON.stringify([A[2], A[3], A[5]]));
+    // Schwellen
+    const Ta = LEGAL.thresholds['2026'].values, Tn = LEGAL.thresholds['2027'].values;
+    t('Schwellen alt 26,9→PG1', pflegegrad(26.9, Ta) === 1);
+    t('Schwellen alt 27→PG2', pflegegrad(27, Ta) === 2);
+    t('Schwellen alt 47,5→PG3', pflegegrad(47.5, Ta) === 3);
+    t('Schwellen alt 12,49→PG0', pflegegrad(12.49, Ta) === 0);
+    t('Schwellen neu 29,9→PG1', pflegegrad(29.9, Tn) === 1);
+    t('Schwellen neu 30→PG2', pflegegrad(30, Tn) === 2);
+    t('Schwellen neu 50→PG3', pflegegrad(50, Tn) === 3);
+    t('Schwellen neu 90→PG5', pflegegrad(90, Tn) === 5);
+    // Modul 5
+    let m = m5Points({ '5.1': { n: 2, u: 'd' } });
+    t('M5 Teil 1: 2×/Tag → 1 Punkt', m.p1 === 1);
+    m = m5Points({ '5.1': { n: 4, u: 'd' } });
+    t('M5 Teil 1: 4×/Tag → 2 Punkte', m.p1 === 2);
+    m = m5Points({ '5.1': { n: 9, u: 'd' } });
+    t('M5 Teil 1: 9×/Tag → 3 Punkte', m.p1 === 3);
+    m = m5Points({ '5.6': { n: 3, u: 'w' } });
+    t('M5 Teil 1: 3×/Woche → 0 Punkte', m.p1 === 0);
+    m = m5Points({ '5.8': { n: 2, u: 'w' } });
+    t('M5 Teil 2: 2×/Woche → 1 Punkt', m.p2 === 1);
+    m = m5Points({ '5.8': { n: 1, u: 'd' } });
+    t('M5 Teil 2: 1×/Tag → 2 Punkte', m.p2 === 2);
+    m = m5Points({ '5.8': { n: 3, u: 'd' } });
+    t('M5 Teil 2: 3×/Tag → 3 Punkte', m.p2 === 3);
+    m = m5Points({ '5.13': { n: 6, u: 'm' }, '5.14': { n: 2, u: 'w' } });
+    t('M5 Teil 3: 6 Arztbesuche/Monat + 2 Therapien/Woche → 3 Punkte', m.p3 === 3 && Math.abs(m.s3 - 14.6) < 1e-9);
+    m = m5Points({ '5.13': { n: 1, u: 'w' } });
+    t('M5 Teil 3: 1 Arztbesuch/Woche → 1 Punkt', m.p3 === 1);
+    m = m5Points({ '5.15': { n: 1, u: 'd' } });
+    t('M5 Teil 3: ausgedehnter Besuch täglich → 6 Punkte', m.p3 === 6);
+    m = m5Points({ '5.13': { n: 1, u: 'd' } });
+    t('M5 Teil 3: Arztbesuch täglich → 3 Punkte', m.p3 === 3);
+    // Gesamtrechnung
+    const st = emptyState();
+    st.items['4.4'] = 2; st.items['4.5'] = 1; st.items['4.6'] = 1; st.items['4.8'] = 3; st.items['4.9'] = 2;
+    st.items['1.3'] = 1; st.items['1.4'] = 2; st.items['1.5'] = 3; st.items['6.3'] = 1;
+    const ra = score(st, { thresholds: '2026', anlage2: '2026' });
+    const rn = score(st, { thresholds: '2027', anlage2: '2027' });
+    t('Beispiel alt: 31,25 → PG2', Math.abs(ra.total - 31.25) < 1e-9 && ra.pg === 2);
+    t('Beispiel neu: 15 → PG1', Math.abs(rn.total - 15) < 1e-9 && rn.pg === 1);
+    const st2 = emptyState(); st2.items['2.5'] = 3; st2.items['3.11'] = 5;
+    const r2 = score(st2, { thresholds: '2026', anlage2: '2026' });
+    t('Modul 2/3: nur der höhere Wert zählt', r2.w23 === 11.25 && r2.total === 11.25);
+    const st3 = emptyState(); st3.flags.bbk = true;
+    t('Besondere Bedarfskonstellation → PG5', score(st3, { thresholds: '2026', anlage2: '2026' }).pg === 5);
+    return results;
+  }
+
+  root.NBA = { MODULES, LEGAL, m5Points, weighted, pflegegrad, score, singlePoints, emptyState, fmt, selfTest, version: '1.0.0' };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+
+<script>
+/* =====================================================================
+   Oberfläche
+   ===================================================================== */
+(function () {
+  'use strict';
+  const { MODULES, LEGAL, score, emptyState, fmt, selfTest } = NBA;
+  const STORAGE_KEY = 'pflegegrad-rechner.scenarios.v1';
+  const STATE_KEY = 'pflegegrad-rechner.current.v1';
+
+  let state = emptyState();
+  let legal = { thresholds: '2026', anlage2: '2026' };
+
+  const $ = sel => document.querySelector(sel);
+  const el = (tag, attrs = {}, ...children) => {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'class') e.className = v;
+      else if (k === 'html') e.innerHTML = v;
+      else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+      else if (v !== undefined && v !== null) e.setAttribute(k, v);
+    }
+    for (const c of children) if (c !== null && c !== undefined) e.append(c);
+    return e;
+  };
+
+  // --- Speicher (best effort) --------------------------------------------
+  const store = {
+    get(k, fallback) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
+    del(k) { try { localStorage.removeItem(k); } catch (e) { /* ignorieren */ } }
+  };
+
+  // --- Rechtsstand-Schalter ---------------------------------------------
+  function renderLegalSwitch(container, key) {
+    container.querySelectorAll('label').forEach(l => l.remove());
+    for (const [code, def] of Object.entries(LEGAL[key])) {
+      const input = el('input', { type: 'radio', name: 'legal-' + key, value: code });
+      input.checked = legal[key] === code;
+      input.addEventListener('change', () => { legal[key] = code; update(); });
+      container.append(el('label', {}, input, ' ' + def.label));
+    }
+  }
+
+  // --- Module -------------------------------------------------------------
+  function renderModules() {
+    const main = $('#modules');
+    main.innerHTML = '';
+    for (const m of MODULES) {
+      const summary = el('summary', {},
+        el('span', { class: 'mtitle' }, 'Modul ' + m.id + ': ' + m.title),
+        el('span', { class: 'mscore', id: 'mscore-' + m.id }, m.weight));
+      const body = el('div', { class: 'mbody' }, el('p', { class: 'mintro' }, m.intro + (m.scored ? ' Gewicht: ' + m.weight + '.' : '')));
+      if (m.special === 'm5') {
+        for (const part of m.parts) {
+          body.append(el('h3', {}, part.title));
+          body.append(el('p', { class: 'hint' }, part.rule));
+          for (const item of part.items) body.append(renderFreqItem(item));
+          body.append(el('div', { class: 'partsum', id: 'partsum-' + part.key }));
+        }
+        body.append(el('h3', {}, 'Teil 4'));
+      }
+      for (const item of m.items) body.append(renderRadioItem(m, item));
+      const det = el('details', { class: 'module', id: 'module-' + m.id }, summary, body);
+      if (m.id <= 6) det.open = true;
+      main.append(det);
+    }
+  }
+
+  function renderRadioItem(m, item) {
+    const fs = el('fieldset', { class: 'item', id: 'item-' + item.id });
+    const legend = el('legend', {}, item.id + ' ' + item.label);
+    if (m.scored) legend.append(el('span', { class: 'delta', id: 'delta-' + item.id, title: 'Veränderung der Gesamtpunkte, wenn dieses Kriterium eine Stufe höher bewertet würde (gewählter Rechtsstand)' }));
+    fs.append(legend);
+    if (item.hint) fs.append(el('p', { class: 'hint' }, item.hint));
+    const seg = el('div', { class: 'seg' + (item.scale.length === 3 ? ' three' : '') });
+    for (const opt of item.scale) {
+      const input = el('input', { type: 'radio', name: 'item-' + item.id, value: String(opt.v) });
+      input.checked = (Number(state.items[item.id]) || 0) === opt.v;
+      input.addEventListener('change', () => { state.items[item.id] = opt.v; update(); });
+      seg.append(el('label', {}, input, el('span', {}, opt.l, ' ', el('span', { class: 'pts' }, '(' + opt.v + ')'))));
+    }
+    fs.append(seg);
+    return fs;
+  }
+
+  function renderFreqItem(item) {
+    const fs = el('fieldset', { class: 'item', id: 'item-' + item.id });
+    fs.append(el('legend', {}, item.id + ' ' + item.label));
+    if (item.hint) fs.append(el('p', { class: 'hint' }, item.hint));
+    const cur = state.m5[item.id] || { n: 0, u: 'd' };
+    const num = el('input', { type: 'number', min: '0', step: 'any', inputmode: 'decimal', 'aria-label': 'Häufigkeit ' + item.id });
+    num.value = cur.n || 0;
+    const unit = el('select', { 'aria-label': 'Zeitraum ' + item.id },
+      el('option', { value: 'd' }, 'pro Tag'), el('option', { value: 'w' }, 'pro Woche'), el('option', { value: 'm' }, 'pro Monat'));
+    unit.value = cur.u || 'd';
+    const onChange = () => { state.m5[item.id] = { n: Math.max(0, Number(num.value) || 0), u: unit.value }; update(); };
+    num.addEventListener('input', onChange); unit.addEventListener('change', onChange);
+    fs.append(el('div', { class: 'freq' }, el('span', { class: 'small' }, 'Häufigkeit:'), num, unit));
+    return fs;
+  }
+
+  function syncInputsFromState() {
+    for (const m of MODULES) for (const item of m.items) {
+      const v = Number(state.items[item.id]) || 0;
+      document.querySelectorAll('input[name="item-' + item.id + '"]').forEach(r => { r.checked = Number(r.value) === v; });
+    }
+    for (const p of MODULES[4].parts) for (const item of p.items) {
+      const fs = document.getElementById('item-' + item.id);
+      const cur = state.m5[item.id] || { n: 0, u: 'd' };
+      fs.querySelector('input[type=number]').value = cur.n || 0;
+      fs.querySelector('select').value = cur.u || 'd';
+    }
+    $('#bbk').checked = !!state.flags.bbk;
+    $('#scenNote').value = state.note || '';
+    document.querySelectorAll('input[name="legal-thresholds"]').forEach(r => r.checked = r.value === legal.thresholds);
+    document.querySelectorAll('input[name="legal-anlage2"]').forEach(r => r.checked = r.value === legal.anlage2);
+  }
+
+  // --- Ergebnis -----------------------------------------------------------
+  function update() {
+    const rA = score(state, { thresholds: '2026', anlage2: '2026' });
+    const rN = score(state, { thresholds: '2027', anlage2: '2027' });
+    const rSel = score(state, legal);
+    const activeIsOld = legal.thresholds === '2026' && legal.anlage2 === '2026';
+    const activeIsNew = legal.thresholds === '2027' && legal.anlage2 === '2027';
+
+    // Kopfzeile
+    $('#stickyTotal').textContent = fmt(rSel.total) + ' Punkte';
+    $('#stickyPg').textContent = rSel.pg ? 'Pflegegrad ' + rSel.pg : 'kein Pflegegrad';
+    $('#stickyLegal').textContent = 'Rechtsstand: Schwellen ' + LEGAL.thresholds[legal.thresholds].short + ' · Anlage 2 ' + LEGAL.anlage2[legal.anlage2].short;
+    $('#stickyOther').textContent = activeIsOld
+      ? 'PNOG-E: ' + fmt(rN.total) + ' Punkte, ' + (rN.pg ? 'PG ' + rN.pg : 'kein PG')
+      : 'geltend: ' + fmt(rA.total) + ' Punkte, ' + (rA.pg ? 'PG ' + rA.pg : 'kein PG');
+
+    // Tabelle
+    const tb = $('#resultTable tbody');
+    tb.innerHTML = '';
+    const maxima = { 1: 15, 2: 33, 3: 65, 4: 54, 5: 15, 6: 18 };
+    const row = (label, single, wa, wn, cls) => tb.append(el('tr', { class: cls || '' },
+      el('td', {}, label), el('td', { class: 'num' }, single), el('td', { class: 'num' }, wa), el('td', { class: 'num' }, wn)));
+    const b = (txt, strong) => strong ? el('strong', {}, txt) : txt;
+    row('1 Mobilität', rA.single[1] + ' / 15', b(fmt(rA.weighted[1]), activeIsOld), b(fmt(rN.weighted[1]), activeIsNew));
+    row('2 Kognition / Kommunikation', rA.single[2] + ' / 33', fmt(rA.weighted[2]), fmt(rN.weighted[2]));
+    row('3 Verhalten / psychische Problemlagen', rA.single[3] + ' / 65', fmt(rA.weighted[3]), fmt(rN.weighted[3]));
+    row('   davon zählt (höherer Wert aus 2 und 3)', '', b(fmt(rA.w23), activeIsOld), b(fmt(rN.w23), activeIsNew));
+    row('4 Selbstversorgung', rA.single[4] + ' / 54', b(fmt(rA.weighted[4]), activeIsOld), b(fmt(rN.weighted[4]), activeIsNew));
+    row('5 Krankheits-/Therapieanforderungen', rA.single[5] + ' / 15', b(fmt(rA.weighted[5]), activeIsOld), b(fmt(rN.weighted[5]), activeIsNew));
+    row('6 Alltagsgestaltung / Kontakte', rA.single[6] + ' / 18', b(fmt(rA.weighted[6]), activeIsOld), b(fmt(rN.weighted[6]), activeIsNew));
+    row('Gesamtpunkte', '', b(fmt(rA.total), activeIsOld), b(fmt(rN.total), activeIsNew), 'total');
+    row('Pflegegrad (mit jeweiligen Schwellen)', '', b(rA.pg ? 'PG ' + rA.pg : 'keiner', activeIsOld), b(rN.pg ? 'PG ' + rN.pg : 'keiner', activeIsNew), 'total');
+
+    // Hinweise
+    const notes = $('#resultNotes');
+    notes.innerHTML = '';
+    if (rSel.bbk) notes.append(el('div', { class: 'note warn' }, 'Besondere Bedarfskonstellation gesetzt: Pflegegrad 5 unabhängig von den Punkten.'));
+    if (!activeIsOld && !activeIsNew) notes.append(el('div', { class: 'note warn' }, 'Gemischter Rechtsstand gewählt (Schwellen und Anlage 2 aus verschiedenen Fassungen). Ergebnis in der Kopfzeile: ' + fmt(rSel.total) + ' Punkte, ' + (rSel.pg ? 'Pflegegrad ' + rSel.pg : 'kein Pflegegrad') + '.'));
+    if (rN.pg < rA.pg && !rSel.bbk) {
+      notes.append(el('div', { class: 'note bad' }, 'Nach dem PNOG-Entwurf ergäbe dieselbe Bewertung einen niedrigeren Pflegegrad (' + (rN.pg ? 'PG ' + rN.pg : 'keiner') + ' statt PG ' + rA.pg + '). Für vor dem 01.01.2027 festgestellte Pflegegrade sieht der Entwurf in § 142b Abs. 2 SGB XI-E vor, dass ein bestehender Pflegegrad bei einer Neubegutachtung nicht allein wegen der neuen Schwellenwerte und der neuen Anlage 2 verloren gehen soll – wohl aber bei tatsächlicher Verbesserung der Selbständigkeit. Für Erst- und Höherstufungsanträge ab 2027 gilt das neue Recht.'));
+    } else if (rN.pg === rA.pg && rN.total < rA.total && !rSel.bbk) {
+      notes.append(el('div', { class: 'note warn' }, 'Der Pflegegrad bleibt in beiden Fassungen gleich, aber der Abstand zur nächsten Schwelle ändert sich: ' + fmt(rA.total) + ' (geltend) gegenüber ' + fmt(rN.total) + ' (PNOG-E).'));
+    } else if (rN.pg === rA.pg && !rSel.bbk) {
+      notes.append(el('div', { class: 'note ok' }, 'Die Bewertung führt in beiden Fassungen zum gleichen Ergebnis.'));
+    }
+    // Abstand zur nächsten Schwelle (gewählter Rechtsstand)
+    if (!rSel.bbk) {
+      const th = LEGAL.thresholds[legal.thresholds].values;
+      const next = th.find(t => rSel.total < t - 1e-9);
+      if (next !== undefined) notes.append(el('div', { class: 'note', style: 'background:var(--soft)' }, 'Bis zur nächsten Schwelle (' + fmt(next) + ' Punkte) fehlen ' + fmt(next - rSel.total) + ' gewichtete Punkte. Die Werte neben den Kriterien zeigen, was eine Stufe mehr jeweils bringen würde.'));
+    }
+
+    // Modulköpfe
+    for (const m of MODULES) {
+      const sc = document.getElementById('mscore-' + m.id);
+      if (!m.scored) { sc.textContent = 'nicht gewertet'; continue; }
+      const sel = rSel;
+      const maxTxt = sel.single[m.id] + ' / ' + maxima[m.id] + ' Einzelpunkte';
+      const wTxt = (m.id === 2 || m.id === 3) ? 'gewichtet ' + fmt(sel.weighted[m.id]) + (sel.w23 === sel.weighted[m.id] && sel.weighted[m.id] > 0 ? ' (zählt)' : '') : 'gewichtet ' + fmt(sel.weighted[m.id]);
+      sc.textContent = maxTxt + ' → ' + wTxt;
+    }
+
+    // Modul 5 Teilsummen
+    const m5 = rSel.m5;
+    $('#partsum-p1').textContent = 'Summe pro Tag: ' + fmt(m5.s1) + ' → ' + m5.p1 + ' Punkt' + (m5.p1 === 1 ? '' : 'e');
+    $('#partsum-p2').textContent = 'Summe pro Tag: ' + fmt(m5.s2) + ' → ' + m5.p2 + ' Punkt' + (m5.p2 === 1 ? '' : 'e');
+    $('#partsum-p3').textContent = 'Gewichtete Summe pro Monat: ' + fmt(m5.s3) + ' → ' + m5.p3 + ' Punkt' + (m5.p3 === 1 ? '' : 'e');
+
+    // Deltas je Kriterium (eine Stufe höher, gewählter Rechtsstand)
+    for (const m of MODULES) {
+      if (!m.scored) continue;
+      for (const item of m.items) {
+        const d = document.getElementById('delta-' + item.id);
+        if (!d) continue;
+        const cur = Number(state.items[item.id]) || 0;
+        const idx = item.scale.findIndex(o => o.v === cur);
+        const nextOpt = item.scale[idx + 1];
+        if (!nextOpt) { d.textContent = 'Höchststufe'; continue; }
+        const probe = { ...state, items: { ...state.items, [item.id]: nextOpt.v } };
+        const diff = score(probe, legal).total - rSel.total;
+        d.textContent = 'nächste Stufe: ' + (diff > 0 ? '+' : '±') + fmt(Math.abs(diff));
+      }
+    }
+
+    store.set(STATE_KEY, { state, legal });
+  }
+
+  // --- Szenarien ---------------------------------------------------------
+  function currentScenario(name) {
+    return {
+      app: 'pflegegrad-rechner', schemaVersion: 1, name: name || '', savedAt: new Date().toISOString(),
+      legal: { ...legal }, items: { ...state.items }, m5: JSON.parse(JSON.stringify(state.m5)), flags: { ...state.flags }, note: state.note || ''
+    };
+  }
+
+  function applyScenario(s) {
+    const fresh = emptyState();
+    if (s.items && typeof s.items === 'object') for (const k of Object.keys(fresh.items)) if (k in s.items) fresh.items[k] = Number(s.items[k]) || 0;
+    if (s.m5 && typeof s.m5 === 'object') for (const k of Object.keys(fresh.m5)) if (s.m5[k]) fresh.m5[k] = { n: Math.max(0, Number(s.m5[k].n) || 0), u: ['d', 'w', 'm'].includes(s.m5[k].u) ? s.m5[k].u : 'd' };
+    fresh.flags.bbk = !!(s.flags && s.flags.bbk);
+    fresh.note = typeof s.note === 'string' ? s.note : '';
+    state = fresh;
+    if (s.legal) {
+      if (LEGAL.thresholds[s.legal.thresholds]) legal.thresholds = s.legal.thresholds;
+      if (LEGAL.anlage2[s.legal.anlage2]) legal.anlage2 = s.legal.anlage2;
+    }
+    $('#scenName').value = s.name || '';
+    syncInputsFromState();
+    update();
+  }
+
+  function listScenarios() {
+    const ul = $('#scenList');
+    ul.innerHTML = '';
+    const all = store.get(STORAGE_KEY, []);
+    if (!all.length) { ul.append(el('li', { class: 'small' }, 'Noch keine gespeicherten Szenarien.')); return; }
+    all.forEach((s, i) => {
+      const rA = score(normalize(s), { thresholds: '2026', anlage2: '2026' });
+      const rN = score(normalize(s), { thresholds: '2027', anlage2: '2027' });
+      ul.append(el('li', {},
+        el('span', { class: 'name' }, el('strong', {}, s.name || '(ohne Namen)'), el('span', { class: 'small' }, ' · ' + new Date(s.savedAt).toLocaleDateString('de-DE') + ' · geltend ' + fmt(rA.total) + ' (PG ' + rA.pg + ') · PNOG-E ' + fmt(rN.total) + ' (PG ' + rN.pg + ')')),
+        el('button', { type: 'button', onclick: () => applyScenario(s) }, 'Laden'),
+        el('button', { type: 'button', class: 'danger', onclick: () => { if (confirm('Szenario „' + (s.name || 'ohne Namen') + '" löschen?')) { all.splice(i, 1); store.set(STORAGE_KEY, all); listScenarios(); } } }, 'Löschen')));
+    });
+  }
+
+  function normalize(s) {
+    const fresh = emptyState();
+    Object.assign(fresh.items, s.items || {});
+    for (const k of Object.keys(fresh.m5)) if (s.m5 && s.m5[k]) fresh.m5[k] = s.m5[k];
+    fresh.flags.bbk = !!(s.flags && s.flags.bbk);
+    return fresh;
+  }
+
+  function download(filename, text) {
+    const blob = new Blob([text], { type: 'application/json' });
+    const a = el('a', { href: URL.createObjectURL(blob), download: filename });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  function safeName(s) { return (s || 'szenario').replace(/[^\wäöüÄÖÜß-]+/g, '_').slice(0, 60); }
+
+  // --- Beispiel (zeigt die Wirkung der geänderten Anlage 2) --------------
+  function demo() {
+    const s = emptyState();
+    s.items['1.3'] = 1; s.items['1.4'] = 2; s.items['1.5'] = 3;
+    s.items['4.4'] = 2; s.items['4.5'] = 1; s.items['4.6'] = 1; s.items['4.8'] = 3; s.items['4.9'] = 2;
+    s.items['6.3'] = 1;
+    s.note = 'Beispiel: identische Bewertung ergibt nach geltendem Recht 31,25 Punkte (Pflegegrad 2), nach dem PNOG-Entwurf 15 Punkte (Pflegegrad 1). Die Differenz entsteht allein durch die geänderte Anlage 2 in den Modulen 1, 4 und 6.';
+    applyScenario({ ...s, name: 'Beispiel Anlage 2', legal: { thresholds: '2026', anlage2: '2026' } });
+    document.getElementById('resultPanel').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // --- Start --------------------------------------------------------------
+  function init() {
+    renderLegalSwitch($('#swThresholds'), 'thresholds');
+    renderLegalSwitch($('#swAnlage2'), 'anlage2');
+    renderModules();
+
+    document.querySelectorAll('[data-preset]').forEach(btn => btn.addEventListener('click', () => {
+      legal = { thresholds: btn.dataset.preset, anlage2: btn.dataset.preset };
+      syncInputsFromState(); update();
+    }));
+    $('#toggleHints').addEventListener('change', e => document.body.classList.toggle('show-hints', e.target.checked));
+    $('#bbk').addEventListener('change', e => { state.flags.bbk = e.target.checked; update(); });
+    $('#scenNote').addEventListener('input', e => { state.note = e.target.value; store.set(STATE_KEY, { state, legal }); });
+
+    $('#btnSave').addEventListener('click', () => {
+      const name = $('#scenName').value.trim() || ('Szenario ' + new Date().toLocaleString('de-DE'));
+      const all = store.get(STORAGE_KEY, []);
+      const idx = all.findIndex(s => s.name === name);
+      const sc = currentScenario(name);
+      if (idx >= 0) all[idx] = sc; else all.push(sc);
+      if (!store.set(STORAGE_KEY, all)) alert('Speichern im Browser nicht möglich (z. B. privater Modus). Bitte JSON exportieren.');
+      listScenarios();
+    });
+    $('#btnExport').addEventListener('click', () => {
+      const name = $('#scenName').value.trim();
+      download('pflegegrad_' + safeName(name) + '.json', JSON.stringify(currentScenario(name), null, 2));
+    });
+    $('#btnExportAll').addEventListener('click', () => {
+      download('pflegegrad_szenarien.json', JSON.stringify(store.get(STORAGE_KEY, []), null, 2));
+    });
+    $('#fileImport').addEventListener('change', async e => {
+      const file = e.target.files[0]; if (!file) return;
+      try {
+        const data = JSON.parse(await file.text());
+        if (Array.isArray(data)) {
+          const all = store.get(STORAGE_KEY, []);
+          for (const s of data) if (s && s.items) all.push({ ...s, name: s.name || file.name });
+          store.set(STORAGE_KEY, all); listScenarios();
+          alert(data.length + ' Szenario(s) importiert.');
+        } else if (data && data.items) {
+          applyScenario(data);
+        } else {
+          alert('Datei enthält kein erkennbares Szenario.');
+        }
+      } catch (err) { alert('Datei konnte nicht gelesen werden: ' + err.message); }
+      e.target.value = '';
+    });
+    $('#btnDemo').addEventListener('click', demo);
+    $('#btnReset').addEventListener('click', () => {
+      if (!confirm('Alle Eingaben zurücksetzen? Gespeicherte Szenarien bleiben erhalten.')) return;
+      state = emptyState(); legal = { thresholds: '2026', anlage2: '2026' }; $('#scenName').value = '';
+      store.del(STATE_KEY); syncInputsFromState(); update();
+    });
+    $('#btnPrint').addEventListener('click', () => window.print());
+
+    // letzten Stand wiederherstellen
+    const saved = store.get(STATE_KEY, null);
+    if (saved && saved.state) { applyScenario({ ...saved.state, legal: saved.legal }); }
+    else { syncInputsFromState(); update(); }
+    listScenarios();
+
+    // Selbsttests
+    const res = selfTest();
+    const fails = res.filter(r => !r.ok);
+    const p = $('#selftest');
+    p.textContent = 'Selbsttests der Rechenlogik: ' + (res.length - fails.length) + ' von ' + res.length + ' bestanden.' + (fails.length ? ' Fehlgeschlagen: ' + fails.map(f => f.name).join('; ') : '');
+    p.classList.toggle('fail', fails.length > 0);
+    if (fails.length) console.error('Selbsttests fehlgeschlagen', fails);
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+</body>
+</html>
